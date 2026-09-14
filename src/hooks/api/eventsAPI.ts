@@ -1,8 +1,8 @@
 import {
-    queryOptions,
-    useMutation,
-    useQuery,
-    useQueryClient,
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
 } from "@tanstack/react-query";
 import { z } from "zod";
 
@@ -10,29 +10,41 @@ import { eventTypes } from "@/constants/eventTypes";
 import { useAuth } from "@/context/auth-context";
 import { apiJSON } from "@/services/api-client";
 
-// GET /api/events/me returns a single profile (or null), not a list.
+// Accept event lists and normalize legacy single-profile/null responses to a list.
 const eventSchema = z
   .object({
     id: z.string(),
     userId: z.string(),
     userName: z.string(),
     budget: z.union([z.string(), z.number()]),
+    eventTitle: z.string(),
     eventDate: z.string().datetime({ offset: true }),
     eventAddress: z.string(),
     eventType: z.string(),
     eventImage: z.string().nullish(),
+    eventStatus: z.string(),
+    budgetStatus: z.string(),
   })
   .passthrough();
 
-const eventsResponseSchema = z.object({ data: eventSchema.nullable() });
+const eventsResponseSchema = z.object({
+  data: z
+    .union([z.array(eventSchema), eventSchema])
+    .nullable()
+    .transform((data) =>
+      data === null ? [] : Array.isArray(data) ? data : [data],
+    ),
+});
 
 export type EventProfile = z.infer<typeof eventSchema>;
 
 export type CreateEventInput = {
   userName: string;
+  eventTitle: string;
   eventType: (typeof eventTypes)[number];
   eventAddress: string;
   eventDate: string;
+  eventTime: string;
   budget: number;
   eventImage?: string;
 };
@@ -64,7 +76,10 @@ export function useCreateEvent() {
 
 export type UpdateEventInput = Partial<CreateEventInput>;
 
-export async function updateEvent(id: string, input: UpdateEventInput): Promise<EventProfile> {
+export async function updateEvent(
+  id: string,
+  input: UpdateEventInput,
+): Promise<EventProfile> {
   const payload = await apiJSON(`/api/events/${encodeURIComponent(id)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -77,9 +92,32 @@ export function useUpdateEvent() {
   const client = useQueryClient();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: UpdateEventInput }) => updateEvent(id, input),
+    mutationFn: ({ id, input }: { id: string; input: UpdateEventInput }) =>
+      updateEvent(id, input),
     onSuccess: async () => {
-      await client.invalidateQueries({ queryKey: eventKeys.mine(user?.id ?? null), exact: true });
+      await client.invalidateQueries({
+        queryKey: eventKeys.mine(user?.id ?? null),
+        exact: true,
+      });
+    },
+  });
+}
+
+export async function deleteEvent(id: string): Promise<void> {
+  await apiJSON(`/api/events/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function useDeleteEvent() {
+  const client = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: deleteEvent,
+    onSuccess: async (_, id) => {
+      const queryKey = eventKeys.mine(user?.id ?? null);
+      client.setQueryData<EventProfile[]>(queryKey, (events) =>
+        events?.filter((event) => event.id !== id),
+      );
+      await client.invalidateQueries({ queryKey, exact: true });
     },
   });
 }
@@ -89,9 +127,7 @@ export const eventKeys = {
   mine: (userId: string | null) => ["events", "me", userId] as const,
 };
 
-export async function getEvents(
-  signal?: AbortSignal,
-): Promise<EventProfile | null> {
+export async function getEvents(signal?: AbortSignal): Promise<EventProfile[]> {
   // apiJSON -> apiFetch reads getAuthToken() for each request.
   const payload = await apiJSON("/api/events/me", { method: "GET", signal });
   const result = eventsResponseSchema.safeParse(payload);

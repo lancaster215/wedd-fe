@@ -1,30 +1,35 @@
 import { eventTypes } from "@/constants/eventTypes";
-import { useCreateEvent, useUpdateEvent, type EventProfile } from "@/hooks/api/eventsAPI";
+import { useAuth } from "@/context/auth-context";
+import {
+  useCreateEvent,
+  useUpdateEvent,
+  type EventProfile,
+} from "@/hooks/api/eventsAPI";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { useState, type ReactElement } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
-	ActivityIndicator,
-	KeyboardAvoidingView,
-	Platform,
-	Pressable,
-	ScrollView,
-	StyleSheet,
-	Text,
-	TextInput,
-	View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-	ArrowDown5,
-	ArrowLeft2,
-	Calendar4,
-	Clock2,
-	CloseCircle,
-	Image3,
-	LocationAlt,
+  ArrowDown5,
+  ArrowLeft2,
+  Calendar4,
+  Clock2,
+  CloseCircle,
+  Image3,
+  LocationAlt,
 } from "reicon-react-native";
 import { z } from "zod";
 import EventDateTimeInput from "./EventDateTimeInput";
@@ -41,7 +46,7 @@ function validDate(value: string) {
 }
 
 const formSchema = z.object({
-  eventName: z.string().trim().min(1, "Enter an event name."),
+  eventTitle: z.string().trim().min(1, "Enter an event name."),
   eventType: z.enum(eventTypes),
   place: z.string().trim().min(1, "Enter a place or venue."),
   date: z.string().refine(validDate, "Enter a valid date (YYYY-MM-DD)."),
@@ -68,8 +73,17 @@ const typeLabel = (value: string) =>
     .map((word) => word[0].toUpperCase() + word.slice(1))
     .join(" ");
 
-export default function CreateEventForm({ onClose, event }: { onClose: () => void; event?: EventProfile }) {
-  const [eventImage, setEventImage] = useState<string | undefined>(event?.eventImage ?? undefined);
+export default function CreateEventForm({
+  onClose,
+  event,
+}: {
+  onClose: () => void;
+  event?: EventProfile;
+}) {
+  const { user } = useAuth();
+  const [eventImage, setEventImage] = useState<string | undefined>(
+    event?.eventImage ?? undefined,
+  );
   const [pickingImage, setPickingImage] = useState(false);
   const [imageError, setImageError] = useState<string>();
   const [typesOpen, setTypesOpen] = useState(false);
@@ -81,30 +95,39 @@ export default function CreateEventForm({ onClose, event }: { onClose: () => voi
   const {
     control,
     handleSubmit,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      eventName: event?.userName ?? "",
+      eventTitle: event?.eventTitle ?? "",
       eventType: event ? z.enum(eventTypes).parse(event.eventType) : "WEDDING",
       place: event?.eventAddress ?? "",
-      date: eventDate ? `${eventDate.getFullYear()}-${pad(eventDate.getMonth() + 1)}-${pad(eventDate.getDate())}` : "",
-      time: eventDate ? `${pad(eventDate.getHours())}:${pad(eventDate.getMinutes())}` : "",
+      date: eventDate
+        ? `${eventDate.getFullYear()}-${pad(eventDate.getMonth() + 1)}-${pad(eventDate.getDate())}`
+        : "",
+      time: eventDate
+        ? `${pad(eventDate.getHours())}:${pad(eventDate.getMinutes())}`
+        : "",
       budget: event ? String(event.budget) : "",
     },
   });
   const busy = isSubmitting || mutation.isPending || pickingImage;
+
   const pickImage = async () => {
     if (busy) return;
     setPickingImage(true);
     setImageError(undefined);
     try {
       if (Platform.OS !== "web") {
-        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        const permission =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
-          setImageError(permission.canAskAgain
-            ? "Allow photo access to choose a background image."
-            : "Photo access is disabled. Enable it in your phone’s app settings, then try again.");
+          setImageError(
+            permission.canAskAgain
+              ? "Allow photo access to choose a background image."
+              : "Photo access is disabled. Enable it in your phone’s app settings, then try again.",
+          );
           return;
         }
       }
@@ -122,19 +145,37 @@ export default function CreateEventForm({ onClose, event }: { onClose: () => voi
       setPickingImage(false);
     }
   };
+
   const submit = handleSubmit(async (values) => {
+    if (!user?.email) {
+      setError("root", {
+        message: "Please sign in again before saving your event.",
+      });
+      return;
+    }
     const [year, month, day] = values.date.split("-").map(Number);
     const [hour, minute] = values.time.split(":").map(Number);
     try {
       const input = {
-        userName: values.eventName,
+        userName: user.email,
+        eventTitle: values.eventTitle,
         eventType: values.eventType,
         eventAddress: values.place,
-        eventDate: eventDate && values.date === `${eventDate.getFullYear()}-${pad(eventDate.getMonth() + 1)}-${pad(eventDate.getDate())}` && values.time === `${pad(eventDate.getHours())}:${pad(eventDate.getMinutes())}`
-          ? event!.eventDate
-          : new Date(year, month - 1, day, hour, minute).toISOString(),
+        eventTime: values.time,
+        eventDate:
+          eventDate &&
+          values.date ===
+            `${eventDate.getFullYear()}-${pad(eventDate.getMonth() + 1)}-${pad(eventDate.getDate())}` &&
+          values.time ===
+            `${pad(eventDate.getHours())}:${pad(eventDate.getMinutes())}`
+            ? event!.eventDate
+            : new Date(year, month - 1, day, hour, minute).toISOString(),
         budget: Number(values.budget.replace(/,/g, "")),
-        ...(event ? { eventImage: eventImage ?? "" } : eventImage ? { eventImage } : {}),
+        ...(event
+          ? { eventImage: eventImage ?? "" }
+          : eventImage
+            ? { eventImage }
+            : {}),
       };
       if (event) {
         await updateMutation.mutateAsync({ id: event.id, input });
@@ -146,6 +187,7 @@ export default function CreateEventForm({ onClose, event }: { onClose: () => voi
       /* The mutation error is displayed below; retain all entered values. */
     }
   });
+
   const field = (
     name: Exclude<keyof FormData, "eventType">,
     label: string,
@@ -160,30 +202,34 @@ export default function CreateEventForm({ onClose, event }: { onClose: () => voi
         <Controller
           control={control}
           name={name}
-          render={({ field: { value, onChange, onBlur } }) => name === "date" || name === "time" ? (
-            <EventDateTimeInput
-              mode={name}
-              value={value}
-              disabled={busy}
-              onChange={onChange}
-              onBlur={onBlur}
-            />
-          ) : (
-            <TextInput
-              accessibilityLabel={label}
-              editable={!busy}
-              style={styles.input}
-              value={value}
-              onChangeText={onChange}
-              onBlur={onBlur}
-              placeholder={placeholder}
-              placeholderTextColor="#A89D97"
-              keyboardType={name === "budget" ? "decimal-pad" : "default"}
-              autoCapitalize={
-                name === "eventName" || name === "place" ? "sentences" : "none"
-              }
-            />
-          )}
+          render={({ field: { value, onChange, onBlur } }) =>
+            name === "date" || name === "time" ? (
+              <EventDateTimeInput
+                mode={name}
+                value={value}
+                disabled={busy}
+                onChange={onChange}
+                onBlur={onBlur}
+              />
+            ) : (
+              <TextInput
+                accessibilityLabel={label}
+                editable={!busy}
+                style={styles.input}
+                value={value}
+                onChangeText={onChange}
+                onBlur={onBlur}
+                placeholder={placeholder}
+                placeholderTextColor="#A89D97"
+                keyboardType={name === "budget" ? "decimal-pad" : "default"}
+                autoCapitalize={
+                  name === "eventTitle" || name === "place"
+                    ? "sentences"
+                    : "none"
+                }
+              />
+            )
+          }
         />
       </View>
       {errors[name] && (
@@ -207,7 +253,9 @@ export default function CreateEventForm({ onClose, event }: { onClose: () => voi
           >
             <ArrowLeft2 />
           </Pressable>
-          <Text style={styles.title}>{event ? "Edit Celebration" : "New Celebration"}</Text>
+          <Text style={styles.title}>
+            {event ? "Edit Celebration" : "New Celebration"}
+          </Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close form"
@@ -223,7 +271,7 @@ export default function CreateEventForm({ onClose, event }: { onClose: () => voi
           showsVerticalScrollIndicator={false}
         >
           {field(
-            "eventName",
+            "eventTitle",
             "Event Name",
             "e.g., Sophisticated Garden Wedding",
           )}
@@ -249,25 +297,34 @@ export default function CreateEventForm({ onClose, event }: { onClose: () => voi
                   </Pressable>
                   {typesOpen && (
                     <View style={styles.options}>
-                      {eventTypes.map((type) => (
-                        <Pressable
-                          key={type}
-                          accessibilityRole="radio"
-                          accessibilityState={{ checked: type === value }}
-                          onPress={() => {
-                            onChange(type);
-                            setTypesOpen(false);
-                          }}
-                          style={[
-                            styles.option,
-                            type === value && styles.selected,
-                          ]}
-                        >
-                          <Text style={styles.optionText}>
-                            {typeLabel(type)}
-                          </Text>
-                        </Pressable>
-                      ))}
+                      <ScrollView
+                        style={styles.optionsScroll}
+                        nestedScrollEnabled
+                        showsVerticalScrollIndicator
+                        persistentScrollbar
+                        indicatorStyle="black"
+                        keyboardShouldPersistTaps="handled"
+                      >
+                        {eventTypes.map((type) => (
+                          <Pressable
+                            key={type}
+                            accessibilityRole="radio"
+                            accessibilityState={{ checked: type === value }}
+                            onPress={() => {
+                              onChange(type);
+                              setTypesOpen(false);
+                            }}
+                            style={[
+                              styles.option,
+                              type === value && styles.selected,
+                            ]}
+                          >
+                            <Text style={styles.optionText}>
+                              {typeLabel(type)}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </ScrollView>
                     </View>
                   )}
                 </>
@@ -290,23 +347,53 @@ export default function CreateEventForm({ onClose, event }: { onClose: () => voi
             <Pressable
               style={styles.upload}
               accessibilityRole="button"
-              accessibilityLabel={eventImage ? "Change background image" : "Choose background image"}
+              accessibilityLabel={
+                eventImage
+                  ? "Change background image"
+                  : "Choose background image"
+              }
               accessibilityState={{ disabled: busy, busy: pickingImage }}
               disabled={busy}
               onPress={() => void pickImage()}
             >
-              {pickingImage ? <ActivityIndicator color="#FF6B52" /> : eventImage ? (
-                <Image source={{ uri: eventImage }} style={styles.imagePreview} contentFit="cover" accessibilityLabel="Selected event background" />
-              ) : <Image3 />}
+              {pickingImage ? (
+                <ActivityIndicator color="#FF6B52" />
+              ) : eventImage ? (
+                <Image
+                  source={{ uri: eventImage }}
+                  style={styles.imagePreview}
+                  contentFit="cover"
+                  accessibilityLabel="Selected event background"
+                />
+              ) : (
+                <Image3 />
+              )}
               <Text style={styles.uploadText}>
-                {eventImage ? "Tap to change background image" : "Upload celebratory banner image"}
+                {eventImage
+                  ? "Tap to change background image"
+                  : "Upload celebratory banner image"}
               </Text>
             </Pressable>
-            {eventImage && <Pressable accessibilityRole="button" disabled={busy} onPress={() => setEventImage(undefined)}>
-              <Text style={styles.removeImage}>Remove image</Text>
-            </Pressable>}
-            {imageError && <Text accessibilityRole="alert" style={styles.error}>{imageError}</Text>}
+            {eventImage && (
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={() => setEventImage(undefined)}
+              >
+                <Text style={styles.removeImage}>Remove image</Text>
+              </Pressable>
+            )}
+            {imageError && (
+              <Text accessibilityRole="alert" style={styles.error}>
+                {imageError}
+              </Text>
+            )}
           </View>
+          {errors.root && (
+            <Text accessibilityRole="alert" style={styles.error}>
+              {errors.root.message}
+            </Text>
+          )}
           {mutation.isError && (
             <Text accessibilityRole="alert" style={styles.error}>
               {mutation.error.message}
@@ -327,7 +414,9 @@ export default function CreateEventForm({ onClose, event }: { onClose: () => voi
             {busy ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.submitText}>{event ? "Save Changes" : "Create Event"}</Text>
+              <Text style={styles.submitText}>
+                {event ? "Save Changes" : "Create Event"}
+              </Text>
             )}
           </Pressable>
         </View>
@@ -405,7 +494,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "white",
   },
-  option: { paddingHorizontal: 16, paddingVertical: 12 },
+  optionsScroll: { maxHeight: 44 * 5 },
+  option: { height: 44, paddingHorizontal: 16, justifyContent: "center" },
   selected: { backgroundColor: "#FFF0EB" },
   optionText: { fontSize: 16, color: "#302823" },
   upload: {

@@ -24,8 +24,9 @@ export default function AppTabs({ isAuthenticated }: AppTabsProps) {
         },
       }}
     >
+      <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen
-        name="index"
+        name="events"
         options={{
           title: "Events",
           tabBarIcon: ({ color, size }) => (

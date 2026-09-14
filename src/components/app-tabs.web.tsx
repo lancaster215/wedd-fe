@@ -23,10 +23,10 @@ export default function AppTabs({ isAuthenticated }: AppTabsProps) {
   return (
     <Tabs>
       <TabSlot style={{ height: '100%' }} />
-      {isAuthenticated && (
-        <TabList asChild>
+        <TabList style={{ display: isAuthenticated ? 'flex' : 'none' }}>
           <CustomTabList>
-            <TabTrigger name="home" href="/" asChild>
+            <TabTrigger name="sign-in" href="/" style={{ display: 'none' }} />
+            <TabTrigger name="home" href="/events" asChild>
               <TabButton>Home</TabButton>
             </TabTrigger>
             <TabTrigger name="explore" href="/explore" asChild>
@@ -34,7 +34,6 @@ export default function AppTabs({ isAuthenticated }: AppTabsProps) {
             </TabTrigger>
           </CustomTabList>
         </TabList>
-      )}
     </Tabs>
   );
 }

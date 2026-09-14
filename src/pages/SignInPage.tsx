@@ -1,6 +1,7 @@
 import { Colors } from "@/constants/theme";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Image } from "expo-image";
+import { Redirect } from "expo-router";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
@@ -21,7 +22,6 @@ import ModeButton from "@/components/buttons/ModeButton";
 import FormField from "@/components/forms/FormField";
 import { useAuth } from "@/context/auth-context";
 import loginAPI from "@/hooks/api/loginAPI";
-import EventsPage from "./EventsPage";
 
 type AuthMode = "login" | "signup";
 type Role = "User" | "Vendor";
@@ -84,7 +84,7 @@ export default function SignInPage() {
   }
 
   if (isAuthenticated) {
-    return <EventsPage />;
+    return <Redirect href="/events" />;
   }
 
   return (

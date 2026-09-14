@@ -24,6 +24,9 @@ export const Colors = {
   },
   colors: {
     CORAL: "#FF6755",
+    FRESH_LIME: "#37AE0F",
+    BLOOD_RED: "#980002",
+    GOLDEN_HOUR: "#F38200",
     WHITE: "#FFFFFF",
     OFFWHITE: "#E9E2DD",
   },

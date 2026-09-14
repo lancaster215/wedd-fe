@@ -1,35 +1,80 @@
 import CreateEventForm from "@/components/forms/EventForm";
+import ConfirmationModal from "@/components/modals/ConfirmationModal";
 import Avatar from "@/components/ui/Avatar";
 import { Colors } from "@/constants/theme";
-import { useGetEvents, type EventProfile } from "@/hooks/api/eventsAPI";
+import { useAuth } from "@/context/auth-context";
+import {
+  useDeleteEvent,
+  useGetEvents,
+  type EventProfile,
+} from "@/hooks/api/eventsAPI";
+import logoutAPI from "@/hooks/api/logoutAPI";
 import { Image } from "expo-image";
 import { useState } from "react";
 import {
-	ActivityIndicator,
-	Platform,
-	Pressable,
-	RefreshControl,
-	ScrollView,
-	StyleSheet,
-	Text,
-	// useWindowDimensions,
-	View,
+  ActivityIndicator,
+  Modal,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Add, More } from "reicon-react-native";
 
 export default function EventsPage() {
-  // const { height, width } = useWindowDimensions();
+  const { signOut } = useAuth();
+  const { width, height } = useWindowDimensions();
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const events = useGetEvents();
-  const event = events.data;
+  const deleteMutation = useDeleteEvent();
+  const eventList = events.data ?? [];
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const [deleteConfirmationErrorOpen, setDeleteConfirmationErrorOpen] =
+    useState(false);
   const [openAddEvent, setOpenAddEvent] = useState(false);
-
   const [editingEvent, setEditingEvent] = useState<EventProfile | null>(null);
+  const [openProfile, setOpenProfile] = useState(false);
+
+  const handleLogout = async () => {
+    setOpenProfile(false);
+    await logoutAPI();
+    await signOut();
+    return;
+  };
+
   const handleEdit = () => {
-    if (!event) return;
     setMenuOpen(false);
+    const event = eventList.find((item) => item.id === selectedEventId);
+    if (!event) return;
     setEditingEvent(event);
+  };
+
+  const handleDelete = (eventId: string) => {
+    setSelectedEventId(eventId);
+    deleteMutation.reset();
+    setMenuOpen(false);
+    setDeleteConfirmationOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedEventId || deleteMutation.isPending) return;
+    try {
+      await deleteMutation.mutateAsync(selectedEventId);
+      setDeleteConfirmationOpen(false);
+      setSelectedEventId(null);
+    } catch {
+      setDeleteConfirmationOpen(false);
+      setSelectedEventId(null);
+      setDeleteConfirmationErrorOpen(true);
+      // Keep the confirmation open and display the error for retry.
+    }
   };
 
   if (editingEvent) {
@@ -64,7 +109,20 @@ export default function EventsPage() {
             <Text style={styles.heading}>My Events</Text>
             <Text style={styles.subtitle}>Let’s plan your next big day</Text>
           </View>
-          <Avatar />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Profile options"
+            style={{ position: "relative" }}
+            onPress={(e) => {
+              e.currentTarget.measureInWindow((x, y, w, h) => {
+                setMenuPosition({ top: y + h + 6, left: x + w - 100 });
+                setMenuOpen(false);
+                setOpenProfile(true);
+              });
+            }}
+          >
+            <Avatar />
+          </Pressable>
         </View>
 
         <View style={styles.queryStatus} accessibilityLiveRegion="polite">
@@ -83,7 +141,7 @@ export default function EventsPage() {
               {events.data !== undefined
                 ? "Couldn’t refresh your events. Showing saved data. "
                 : "Couldn’t load your events. "}
-              {events.error.message}
+              {/* {events.error.message} */}
             </Text>
           )}
           {events.isRefetching && (
@@ -97,15 +155,15 @@ export default function EventsPage() {
                 Showing saved data. Refresh for the latest updates.
               </Text>
             )} */}
-          {events.data === null && (
+          {events.data !== undefined && eventList.length === 0 && (
             <Text style={styles.subtitle}>
               No events yet. Your event will appear here once it’s created.
             </Text>
           )}
         </View>
 
-        {event && (
-          <View style={styles.card}>
+        {eventList.map((event) => (
+          <View key={event.id} style={styles.card}>
             {event.eventImage ? (
               <Image
                 source={{
@@ -127,15 +185,57 @@ export default function EventsPage() {
             )}
             <View style={styles.overlay} />
             <View style={styles.cardTop}>
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {event.eventType.replace(/_/g, " ")}
-                </Text>
+              <View style={styles.badgeWrapper}>
+                <View style={styles.badgeType}>
+                  <Text style={styles.badgeTypeText}>
+                    {event.eventType.replace(/_/g, " ")}
+                  </Text>
+                </View>
+                <View style={styles.badgeStatus}>
+                  {event.eventStatus === "ENDED" ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Rate Vendors"
+                      onPress={() => console.log("to rate vendor page")}
+                      style={({ pressed }) => [
+                        styles.rateButton,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.rateButtonText}>Rate Vendors</Text>
+                    </Pressable>
+                  ) : (
+                    <>
+                      <Text
+                        style={[
+                          styles.badgeStatusText,
+                          {
+                            color:
+                              event.eventStatus === "ACTIVE"
+                                ? Colors.colors.FRESH_LIME
+                                : event.eventStatus === "POSTPONE"
+                                  ? Colors.colors.BLOOD_RED
+                                  : Colors.colors.WHITE,
+                          },
+                        ]}
+                      >
+                        {event.eventStatus.replace(/_/g, " ")}
+                      </Text>
+                    </>
+                  )}
+                </View>
               </View>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Event options"
-                onPress={() => setMenuOpen(true)}
+                onPress={(e) => {
+                  e.currentTarget.measureInWindow((x, y, w, h) => {
+                    setMenuPosition({ top: y + h + 6, left: x + w - 100 });
+                    setOpenProfile(false);
+                    setSelectedEventId(event.id);
+                    setMenuOpen(true);
+                  });
+                }}
               >
                 <More
                   color="white"
@@ -144,7 +244,7 @@ export default function EventsPage() {
               </Pressable>
             </View>
             <View style={styles.cardBottom}>
-              <Text style={styles.title}>{event.userName}</Text>
+              <Text style={styles.title}>{event.eventTitle}</Text>
               <Text style={styles.address}>{event.eventAddress}</Text>
               <View style={styles.details}>
                 <View style={styles.countdown}>
@@ -162,54 +262,156 @@ export default function EventsPage() {
                 </View>
                 <Text style={styles.budgetLabel}>
                   Budget:{" "}
-                  <Text style={styles.budget}>
-                    {new Intl.NumberFormat("en-PH", {
+                  <Text
+                    style={[
+                      styles.budget,
+                      {
+                        color:
+                          event.budgetStatus === "AVAILABLE"
+                            ? Colors.colors.FRESH_LIME
+                            : event.budgetStatus === "LIMITED"
+                              ? Colors.colors.CORAL
+                              : event.budgetStatus === "OVERSPEND"
+                                ? Colors.colors.BLOOD_RED
+                                : Colors.colors.WHITE,
+                      },
+                    ]}
+                  >
+                    {event.budgetStatus.replace(/_/g, " ")}
+                    {/* {new Intl.NumberFormat("en-PH", {
                       style: "currency",
                       currency: "PHP",
-                    }).format(Number(event.budget))}
+                    }).format(Number(event.budget))} */}
                   </Text>
                 </Text>
               </View>
             </View>
-
-            <View
-              style={{
-                position: "absolute",
-                top: 10,
-                right: 10,
-                display: menuOpen ? "flex" : "none",
-              }}
-            >
-              <View style={styles.panel} accessibilityViewIsModal>
-                <Pressable
-                  accessibilityRole="button"
-                  style={({ pressed }) => [
-                    styles.action,
-                    pressed && styles.pressed,
-                  ]}
-                  onPress={handleEdit}
-                >
-                  <Text style={styles.actionText}>Edit</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setMenuOpen(!menuOpen)}
-                  style={styles.cancel}
-                >
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </Pressable>
-              </View>
-            </View>
           </View>
-        )}
+        ))}
       </ScrollView>
       <Pressable
         accessibilityRole="button"
         onPress={() => setOpenAddEvent(!openAddEvent)}
         style={styles.addButton}
       >
-        <Add color="#ffffff" />
+        <Add color={`${Colors.colors.WHITE}`} />
       </Pressable>
+      <Modal
+        visible={menuOpen || deleteConfirmationOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (deleteMutation.isPending) return;
+          setMenuOpen(false);
+          setDeleteConfirmationOpen(false);
+        }}
+      >
+        {deleteConfirmationOpen ? (
+          <ConfirmationModal
+            questionText="Are you sure you wanted to delete this event?"
+            yesButton
+            yesButtonText={deleteMutation.isPending ? "Deleting…" : "Yes"}
+            noButton
+            noButtonText="No"
+            yesButtonFn={handleConfirmDelete}
+            noButtonFn={() => setDeleteConfirmationOpen(false)}
+            busy={deleteMutation.isPending}
+            errorText={deleteMutation.error?.message}
+          />
+        ) : deleteConfirmationErrorOpen ? (
+          <ConfirmationModal
+            questionText="Something went wrong."
+            yesButton
+            yesButtonText={deleteMutation.isPending ? "Deleting…" : "Retry"}
+            noButton
+            noButtonText="Close"
+            yesButtonFn={handleConfirmDelete}
+            noButtonFn={() => setDeleteConfirmationErrorOpen(false)}
+            busy={deleteMutation.isPending}
+            errorText={deleteMutation.error?.message}
+          />
+        ) : (
+          <View style={{ flex: 1 }}>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss event options"
+              onPress={() => setMenuOpen(false)}
+            />
+            <View
+              style={[
+                styles.panel,
+                {
+                  position: "absolute",
+                  top: Math.max(8, Math.min(menuPosition.top, height - 80)),
+                  left: Math.max(8, Math.min(menuPosition.left, width - 108)),
+                },
+              ]}
+              accessibilityViewIsModal
+            >
+              <Pressable
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.action,
+                  pressed && styles.pressed,
+                ]}
+                onPress={handleEdit}
+              >
+                <Text style={styles.actionText}>Edit</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.actionDelete,
+                  pressed && styles.pressed,
+                ]}
+                onPress={() => {
+                  if (selectedEventId) handleDelete(selectedEventId);
+                }}
+              >
+                <Text style={styles.actionText}>Delete</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+      </Modal>
+      <Modal
+        visible={openProfile}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpenProfile(false)}
+      >
+        <View style={{ flex: 1 }}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss profile options"
+            onPress={() => setOpenProfile(false)}
+          />
+          <View
+            style={[
+              styles.panel,
+              {
+                position: "absolute",
+                top: Math.max(8, Math.min(menuPosition.top, height - 80)),
+                left: Math.max(8, Math.min(menuPosition.left, width - 108)),
+              },
+            ]}
+            accessibilityViewIsModal
+          >
+            <Pressable
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.action,
+                pressed && styles.pressed,
+              ]}
+              onPress={handleLogout}
+            >
+              <Text style={styles.actionText}>Logout</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -259,6 +461,7 @@ const styles = StyleSheet.create({
   },
   subtitle: { fontSize: 15, color: "#796E68", marginTop: 6, lineHeight: 22 },
   card: {
+    marginBottom: 20,
     minHeight: 250,
     position: "relative",
     borderRadius: 24,
@@ -276,13 +479,32 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     padding: 20,
   },
-  badge: {
-    backgroundColor: "#FFF2E9",
+  badgeWrapper: {
+    width: 200,
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  badgeType: {
+    backgroundColor: Colors.colors.OFFWHITE,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
-  badgeText: { color: "#FF6755", fontSize: 12, fontWeight: "600" },
+  badgeStatus: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  badgeTypeText: {
+    color: Colors.colors.CORAL,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  badgeStatusText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
   menu: {
     width: 44,
     height: 44,
@@ -309,7 +531,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    flexWrap: "wrap",
+    // flexWrap: "wrap",
     columnGap: 12,
     rowGap: 10,
   },
@@ -340,7 +562,7 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "25deg" }],
   },
   budgetLabel: { color: "#D9D4CD", fontSize: 13 },
-  budget: { color: "#FFB43F", fontSize: 15, fontWeight: "600" },
+  budget: { fontSize: 15, fontWeight: "600" },
   modal: {
     // flex: 1,
     justifyContent: "center",
@@ -352,6 +574,8 @@ const styles = StyleSheet.create({
     padding: 7,
     borderRadius: 7,
     backgroundColor: "#FCFAF7",
+    width: 100,
+    gap: 10,
   },
   modalTitle: {
     fontFamily: serif,
@@ -361,7 +585,13 @@ const styles = StyleSheet.create({
     color: "#100E0C",
   },
   action: {
-    backgroundColor: "#FF6755",
+    backgroundColor: Colors.colors.CORAL,
+    borderRadius: 5,
+    padding: 5,
+    alignItems: "center",
+  },
+  actionDelete: {
+    backgroundColor: Colors.colors.BLOOD_RED,
     borderRadius: 5,
     padding: 5,
     alignItems: "center",
@@ -387,5 +617,14 @@ const styles = StyleSheet.create({
     boxShadow: "0px 8px 20px 0px rgba(255, 107, 82, 0.2)",
     borderRadius: "50%",
     padding: 10,
+  },
+  rateButton: {
+    backgroundColor: Colors.colors.GOLDEN_HOUR,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  rateButtonText: {
+    color: Colors.colors.WHITE,
   },
 });
