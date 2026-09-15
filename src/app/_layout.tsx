@@ -1,15 +1,8 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import { useColorScheme } from "react-native";
 
-import AppTabs from "@/components/app-tabs";
-import { AuthProvider, useAuth } from "@/context/auth-context";
+import { AuthProvider } from "@/context/auth-context";
 import { QueryProvider } from "@/context/query-provider";
-
-function RootNavigator() {
-  const { isAuthenticated } = useAuth();
-
-  return <AppTabs isAuthenticated={isAuthenticated} />;
-}
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -17,7 +10,10 @@ export default function TabLayout() {
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <QueryProvider>
         <AuthProvider>
-          <RootNavigator />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="event/[id]" />
+          </Stack>
         </AuthProvider>
       </QueryProvider>
     </ThemeProvider>

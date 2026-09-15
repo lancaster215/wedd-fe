@@ -10,6 +10,7 @@ import {
 } from "@/hooks/api/eventsAPI";
 import logoutAPI from "@/hooks/api/logoutAPI";
 import { Image } from "expo-image";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -24,9 +25,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Add, More } from "reicon-react-native";
+import { Add, AttachCircle, More } from "reicon-react-native";
 
 export default function EventsPage() {
+  const router = useRouter();
   const { signOut } = useAuth();
   const { width, height } = useWindowDimensions();
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
@@ -41,6 +43,8 @@ export default function EventsPage() {
   const [openAddEvent, setOpenAddEvent] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventProfile | null>(null);
   const [openProfile, setOpenProfile] = useState(false);
+  const [hoveredStatusId, setHoveredStatusId] = useState<string | null>(null);
+  const [openStatusId, setOpenStatusId] = useState<string | null>(null);
 
   const handleLogout = async () => {
     setOpenProfile(false);
@@ -163,7 +167,10 @@ export default function EventsPage() {
         </View>
 
         {eventList.map((event) => (
-          <View key={event.id} style={styles.card}>
+          <Pressable key={event.id} style={styles.card}
+            accessible={false}
+            onPress={() => router.push({ pathname: "/event/[id]", params: { id: event.id } })}
+          >
             {event.eventImage ? (
               <Image
                 source={{
@@ -186,17 +193,12 @@ export default function EventsPage() {
             <View style={styles.overlay} />
             <View style={styles.cardTop}>
               <View style={styles.badgeWrapper}>
-                <View style={styles.badgeType}>
-                  <Text style={styles.badgeTypeText}>
-                    {event.eventType.replace(/_/g, " ")}
-                  </Text>
-                </View>
-                <View style={styles.badgeStatus}>
+                <View>
                   {event.eventStatus === "ENDED" ? (
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Rate Vendors"
-                      onPress={() => console.log("to rate vendor page")}
+                      onPress={(e) => { e.stopPropagation(); console.log("to rate vendor page"); }}
                       style={({ pressed }) => [
                         styles.rateButton,
                         pressed && styles.pressed,
@@ -205,30 +207,56 @@ export default function EventsPage() {
                       <Text style={styles.rateButtonText}>Rate Vendors</Text>
                     </Pressable>
                   ) : (
-                    <>
-                      <Text
-                        style={[
-                          styles.badgeStatusText,
-                          {
-                            color:
-                              event.eventStatus === "ACTIVE"
-                                ? Colors.colors.FRESH_LIME
-                                : event.eventStatus === "POSTPONE"
-                                  ? Colors.colors.BLOOD_RED
-                                  : Colors.colors.WHITE,
-                          },
-                        ]}
+                    <View style={styles.statusAnchor}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Event status: ${event.eventStatus.replace(/_/g, " ")}`}
+                        accessibilityState={{
+                          expanded:
+                            openStatusId === event.id ||
+                            hoveredStatusId === event.id,
+                        }}
+                        hitSlop={10}
+                        onHoverIn={() => setHoveredStatusId(event.id)}
+                        onHoverOut={() => setHoveredStatusId(null)}
+                        onFocus={() => setHoveredStatusId(event.id)}
+                        onBlur={() => setHoveredStatusId(null)}
+                        onPress={(e) => { e.stopPropagation(); setOpenStatusId(event.id); }}
                       >
-                        {event.eventStatus.replace(/_/g, " ")}
-                      </Text>
-                    </>
+                        <AttachCircle
+                          height="15"
+                          weight="Filled"
+                          color={
+                            event.eventStatus === "ACTIVE"
+                              ? Colors.colors.FRESH_LIME
+                              : event.eventStatus === "POSTPONE"
+                                ? Colors.colors.BLOOD_RED
+                                : Colors.colors.WHITE
+                          }
+                        />
+                      </Pressable>
+                      {(openStatusId === event.id ||
+                        hoveredStatusId === event.id) && (
+                        <View style={styles.statusPopover} pointerEvents="none">
+                          <Text style={styles.statusPopoverText}>
+                            {event.eventStatus.replace(/_/g, " ")}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   )}
+                </View>
+                <View style={styles.badgeType}>
+                  <Text style={styles.badgeTypeText}>
+                    {event.eventType.replace(/_/g, " ")}
+                  </Text>
                 </View>
               </View>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Event options"
                 onPress={(e) => {
+                  e.stopPropagation();
                   e.currentTarget.measureInWindow((x, y, w, h) => {
                     setMenuPosition({ top: y + h + 6, left: x + w - 100 });
                     setOpenProfile(false);
@@ -244,7 +272,7 @@ export default function EventsPage() {
               </Pressable>
             </View>
             <View style={styles.cardBottom}>
-              <Text style={styles.title}>{event.eventTitle}</Text>
+              <Text accessibilityRole="link" onPress={(e) => { e.stopPropagation(); router.push({ pathname: "/event/[id]", params: { id: event.id } }); }} style={styles.title}>{event.eventTitle}</Text>
               <Text style={styles.address}>{event.eventAddress}</Text>
               <View style={styles.details}>
                 <View style={styles.countdown}>
@@ -286,7 +314,7 @@ export default function EventsPage() {
                 </Text>
               </View>
             </View>
-          </View>
+          </Pressable>
         ))}
       </ScrollView>
       <Pressable
@@ -296,6 +324,17 @@ export default function EventsPage() {
       >
         <Add color={`${Colors.colors.WHITE}`} />
       </Pressable>
+      {openStatusId !== null && (
+        <Pressable
+          style={[StyleSheet.absoluteFill, styles.statusDismiss]}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss event status"
+          onPress={() => {
+            setOpenStatusId(null);
+            setHoveredStatusId(null);
+          }}
+        />
+      )}
       <Modal
         visible={menuOpen || deleteConfirmationOpen}
         transparent
@@ -422,6 +461,20 @@ const serif = Platform.select({
   default: "Georgia",
 });
 const styles = StyleSheet.create({
+  statusAnchor: { position: "relative", zIndex: 1 },
+  statusPopover: {
+    position: "absolute",
+    top: 28,
+    left: 0,
+    minWidth: 100,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#FCFAF7",
+    boxShadow: "0px 3px 12px rgba(0,0,0,0.18)",
+  },
+  statusPopoverText: { fontSize: 12, fontWeight: "600", color: "#302823" },
+  statusDismiss: { zIndex: 10 },
   queryStatus: {
     gap: 10,
     marginBottom: 20,
@@ -484,6 +537,7 @@ const styles = StyleSheet.create({
     display: "flex",
     flexDirection: "row",
     alignItems: "center",
+    gap: 10,
   },
   badgeType: {
     backgroundColor: Colors.colors.OFFWHITE,
@@ -491,20 +545,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
-  badgeStatus: {
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
+  // badgeStatus: {},
   badgeTypeText: {
     color: Colors.colors.CORAL,
     fontSize: 12,
     fontWeight: "600",
   },
-  badgeStatusText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
+  // badgeStatusText: {
+  //   fontSize: 12,
+  //   fontWeight: "600",
+  // },
   menu: {
     width: 44,
     height: 44,

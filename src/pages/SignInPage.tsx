@@ -26,52 +26,93 @@ import loginAPI from "@/hooks/api/loginAPI";
 type AuthMode = "login" | "signup";
 type Role = "User" | "Vendor";
 
-const formSchema = z.object({
+const loginSchema = z.object({
   firstName: z.string(),
   lastName: z.string(),
-  email: z.string().email("Enter a valid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  email: z.string({ required_error: "Email is required" })
+    .trim()
+    .min(1, "Email cannot be empty")
+    .email("Please provide a valid email address"),
+  password: z.string({ required_error: "Password is required" })
+    .min(1, "Password cannot be empty"),
+  confirmPassword: z.string(),
 });
 
-type FormData = z.infer<typeof formSchema>;
+const passwordRequirements = [
+  { text: "At least 8 characters", test: (value: string) => value.length >= 8 },
+  { text: "No more than 20 characters", test: (value: string) => value.length <= 20 },
+  { text: "At least one uppercase letter", test: (value: string) => /[A-Z]/.test(value) },
+  { text: "At least one lowercase letter", test: (value: string) => /[a-z]/.test(value) },
+  { text: "At least one number", test: (value: string) => /[0-9]/.test(value) },
+  { text: "At least one special character", test: (value: string) => /[^A-Za-z0-9]/.test(value) },
+];
+
+const signupSchema = loginSchema.extend({
+  firstName: z.string().trim().min(1, "Enter your first name"),
+  lastName: z.string().trim().min(1, "Enter your last name"),
+  password: loginSchema.shape.password.superRefine((value, context) => {
+    passwordRequirements.forEach((requirement) => {
+      if (!requirement.test(value)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: requirement.text });
+      }
+    });
+  }),
+  confirmPassword: z.string().min(1, "Please confirm your password"),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
+});
+
+type FormData = z.infer<typeof loginSchema>;
 
 export default function SignInPage() {
   const { isAuthenticated, isInitializing, signIn } = useAuth();
   const [mode, setMode] = useState<AuthMode>("login");
   const [role, setRole] = useState<Role>("User");
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [loginErrorText, setLoginErrorText] = useState("");
+  const formSchema = mode === "login" ? loginSchema : signupSchema;
   const {
     control,
     handleSubmit,
     clearErrors,
-    setError,
     reset,
-    formState: { errors },
+    watch,
+    formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: { firstName: "", lastName: "", email: "", password: "" },
+    mode: "onTouched",
+    defaultValues: { firstName: "", lastName: "", email: "", password: "", confirmPassword: "" },
   });
 
+  const values = watch();
+  const requiredFieldsComplete = formSchema.safeParse(values).success;
+  const submitDisabled = isSubmitting || !requiredFieldsComplete;
+
   const changeMode = (nextMode: AuthMode) => {
+    setPasswordFocused(false);
+    setLoginErrorText("");
     setMode(nextMode);
     clearErrors();
     reset();
   };
 
   const onSubmit = async (data: FormData) => {
+    setLoginErrorText("");
     if (mode === "login") {
-      const loginRes = await loginAPI(data);
-      await signIn(loginRes.data);
+      try {
+        const loginRes = await loginAPI(data);
+
+        //Save session
+        await signIn(loginRes.data);
+      } catch (e) {
+        setLoginErrorText(
+          e instanceof Error ? e.message : "Couldn’t log in. Please try again.",
+        );
+      }
+
       return;
-    } else {
-      if (!data.firstName.trim() && !data.lastName.trim()) {
-        setError("firstName", { message: "Enter your first name" });
-        return;
-      }
-      if (!data.lastName.trim()) {
-        setError("lastName", { message: "Enter your last name" });
-        return;
-      }
     }
   };
 
@@ -99,6 +140,16 @@ export default function SignInPage() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.card}>
+            <View style={styles.branding}>
+              <Image
+                source={require("@/assets/images/logo-mark.svg")}
+                style={styles.brandLogo}
+                contentFit="contain"
+                accessible={false}
+              />
+              <Text accessibilityRole="header" style={styles.brandName}>ganap</Text>
+              <Text style={styles.brandTagline}>Where word-of-mouth expedite.</Text>
+            </View>
             <View style={styles.modeRow}>
               <ModeButton
                 active={mode === "login"}
@@ -156,7 +207,11 @@ export default function SignInPage() {
                     >
                       <TextInput
                         autoCapitalize="none"
-                        onBlur={onBlur}
+                        onFocus={() => setPasswordFocused(true)}
+                        onBlur={() => {
+                          setPasswordFocused(false);
+                          onBlur();
+                        }}
                         onChangeText={onChange}
                         placeholderTextColor="#403936"
                         secureTextEntry={!passwordVisible}
@@ -187,10 +242,88 @@ export default function SignInPage() {
                     </View>
                   )}
                 />
-                {errors.password && (
-                  <Text style={styles.errorText}>
-                    {errors.password.message}
-                  </Text>
+                <>
+                  {mode === "login" && errors.password && (
+                    <Text style={styles.errorText}>
+                      {errors.password.message}
+                    </Text>
+                  )}
+                  {mode === "login" && loginErrorText !== "" && (
+                    <Text
+                      accessibilityRole="alert"
+                      accessibilityLiveRegion="polite"
+                      style={styles.errorText}
+                    >
+                      {loginErrorText}
+                    </Text>
+                  )}
+                </>
+                {mode === "signup" && (
+                  <>
+                    {passwordFocused && <View style={styles.passwordRequirements}>
+                      {passwordRequirements.map((requirement) => {
+                        const passed = values.password.length > 0 && requirement.test(values.password);
+                        return (
+                          <Text
+                            key={requirement.text}
+                            accessibilityLabel={`${requirement.text}: ${passed ? "met" : "not met"}`}
+                            style={[styles.passwordRequirement, passed ? styles.requirementMet : styles.requirementUnmet]}
+                          >
+                            {passed ? "✓" : "•"} {requirement.text}
+                          </Text>
+                        );
+                      })}
+                    </View>}
+                    <Text style={styles.label}>Confirm Password</Text>
+                    <Controller
+                      control={control}
+                      name="confirmPassword"
+                      render={({ field: { onBlur, onChange, value } }) => (
+                        <View
+                          style={[
+                            styles.passwordInput,
+                            errors.confirmPassword && styles.inputError,
+                          ]}
+                        >
+                          <TextInput
+                            autoCapitalize="none"
+                            onBlur={onBlur}
+                            onChangeText={onChange}
+                            placeholderTextColor="#403936"
+                            secureTextEntry={!passwordVisible}
+                            style={styles.passwordText}
+                            value={value}
+                          />
+                          <Pressable
+                            accessibilityLabel={
+                              !passwordVisible
+                                ? "Hide password"
+                                : "Show password"
+                            }
+                            hitSlop={10}
+                            onPress={() =>
+                              setPasswordVisible((visible) => !visible)
+                            }
+                          >
+                            {!passwordVisible ? (
+                              <Image
+                                source={require("@/assets/images/forms/password_hide.svg")}
+                                style={styles.passwordIcon}
+                              />
+                            ) : (
+                              <Image
+                                source={require("@/assets/images/forms/password_show.svg")}
+                                style={styles.passwordIcon}
+                              />
+                            )}
+                          </Pressable>
+                        </View>
+                      )}
+                    />
+                    {errors.confirmPassword && (
+                      <Text style={styles.errorText}>{errors.confirmPassword.message}</Text>
+                    )}
+                  </>
                 )}
               </View>
 
@@ -226,9 +359,15 @@ export default function SignInPage() {
               <Pressable
                 accessibilityRole="button"
                 onPress={handleSubmit(onSubmit)}
+                disabled={submitDisabled}
+                accessibilityState={{
+                  disabled: submitDisabled,
+                  busy: isSubmitting,
+                }}
                 style={({ pressed }) => [
                   styles.submitButton,
                   pressed && styles.pressed,
+                  submitDisabled && styles.submitDisabled,
                 ]}
               >
                 <Text style={styles.submitText}>
@@ -253,6 +392,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingBottom: 36,
   },
+  branding: {
+    alignItems: "center",
+    paddingTop: 20,
+    marginBottom: 16,
+  },
+  brandLogo: { width: 48, height: 48 },
+  brandName: {
+    fontFamily: Platform.select({ ios: "Georgia", android: "serif", default: "Georgia" }),
+    fontSize: 34,
+    fontWeight: "700",
+    color: "#302823",
+    marginTop: 8,
+  },
+  brandTagline: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#716761",
+    textAlign: "center",
+    marginTop: 4,
+  },
   modeRow: {
     flexDirection: "row",
     justifyContent: "center",
@@ -276,6 +435,10 @@ const styles = StyleSheet.create({
   passwordText: { flex: 1, color: "#332E2B", fontSize: 15, paddingVertical: 0 },
   passwordIcon: { width: 19, height: 14 },
   inputError: { borderColor: Colors.colors.CORAL },
+  passwordRequirements: { gap: 4, marginTop: 8, marginBottom: 16 },
+  passwordRequirement: { fontSize: 12, lineHeight: 18 },
+  requirementMet: { color: "#287A45" },
+  requirementUnmet: { color: "#B42318" },
   errorText: { color: Colors.colors.CORAL, fontSize: 12, marginTop: 5 },
   roleLabel: { color: "#625A56", fontSize: 14, marginBottom: 9 },
   roleRow: { flexDirection: "row", gap: 9 },
@@ -306,6 +469,7 @@ const styles = StyleSheet.create({
   },
   submitText: { color: Colors.colors.WHITE, fontSize: 16, fontWeight: "700" },
   pressed: { opacity: 0.82 },
+  submitDisabled: { opacity: 0.45 },
   home: {
     flex: 1,
     alignItems: "center",
