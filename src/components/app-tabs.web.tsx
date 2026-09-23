@@ -13,21 +13,27 @@ import { ExternalLink } from './external-link';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
+import type { AuthUser } from '@/hooks/api/loginAPI';
+
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 
 type AppTabsProps = {
   isAuthenticated: boolean;
+  userDetails: AuthUser | null;
 };
 
-export default function AppTabs({ isAuthenticated }: AppTabsProps) {
+export default function AppTabs({ isAuthenticated, userDetails }: AppTabsProps) {
   return (
     <Tabs>
       <TabSlot style={{ height: '100%' }} />
         <TabList style={{ display: isAuthenticated ? 'flex' : 'none' }}>
           <CustomTabList>
             <TabTrigger name="sign-in" href="/" style={{ display: 'none' }} />
-            <TabTrigger name="home" href="/events" asChild>
+            <TabTrigger name="home" href="/events" style={{ display: userDetails?.role === "USER" ? 'flex' : 'none' }} asChild>
               <TabButton>Home</TabButton>
+            </TabTrigger>
+            <TabTrigger name="dashboard" href="/dashboard" style={{ display: userDetails?.role === "VENDOR" ? 'flex' : 'none' }} asChild>
+              <TabButton>Dashboard</TabButton>
             </TabTrigger>
             <TabTrigger name="explore" href="/explore" asChild>
               <TabButton>Explore</TabButton>
@@ -38,9 +44,9 @@ export default function AppTabs({ isAuthenticated }: AppTabsProps) {
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+export function TabButton({ children, isFocused, style, ...props }: TabTriggerSlotProps) {
   return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
+    <Pressable {...props} style={(state) => [typeof style === "function" ? style(state) : style, state.pressed && styles.pressed]}>
       <ThemedView
         type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
         style={styles.tabButtonView}>

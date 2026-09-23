@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   PropsWithChildren,
@@ -8,7 +9,6 @@ import {
   useState,
 } from "react";
 import { Platform } from "react-native";
-import { useQueryClient } from "@tanstack/react-query";
 
 import type { AuthUser, LoginAPIResponse } from "@/hooks/api/loginAPI";
 import { apiFetch } from "@/services/api-client";
@@ -77,12 +77,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
-  const signIn = useCallback(async (session: AuthSession) => {
-    queryClient.clear();
-    await saveAuthToken(session.token);
-    setToken(session.token);
-    setUser(session.user);
-  }, [queryClient]);
+  const signIn = useCallback(
+    async (session: AuthSession) => {
+      queryClient.clear();
+      await saveAuthToken(session.token);
+      setToken(session.token);
+      setUser(session.user);
+    },
+    [queryClient],
+  );
 
   const signOut = useCallback(async () => {
     queryClient.clear();

@@ -1,4 +1,4 @@
-import CreateEventForm from "@/components/forms/EventForm";
+import CreateEventForm from "@/components/forms/CreateEventForm";
 import ConfirmationModal from "@/components/modals/ConfirmationModal";
 import Avatar from "@/components/ui/Avatar";
 import { Colors } from "@/constants/theme";
@@ -167,9 +167,13 @@ export default function EventsPage() {
         </View>
 
         {eventList.map((event) => (
-          <Pressable key={event.id} style={styles.card}
+          <Pressable
+            key={event.id}
+            style={styles.card}
             accessible={false}
-            onPress={() => router.push({ pathname: "/event/[id]", params: { id: event.id } })}
+            onPress={() =>
+              router.push({ pathname: "/event/[id]", params: { id: event.id } })
+            }
           >
             {event.eventImage ? (
               <Image
@@ -198,7 +202,10 @@ export default function EventsPage() {
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Rate Vendors"
-                      onPress={(e) => { e.stopPropagation(); console.log("to rate vendor page"); }}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        console.log("to rate vendor page");
+                      }}
                       style={({ pressed }) => [
                         styles.rateButton,
                         pressed && styles.pressed,
@@ -221,7 +228,10 @@ export default function EventsPage() {
                         onHoverOut={() => setHoveredStatusId(null)}
                         onFocus={() => setHoveredStatusId(event.id)}
                         onBlur={() => setHoveredStatusId(null)}
-                        onPress={(e) => { e.stopPropagation(); setOpenStatusId(event.id); }}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          setOpenStatusId(event.id);
+                        }}
                       >
                         <AttachCircle
                           height="15"
@@ -272,7 +282,19 @@ export default function EventsPage() {
               </Pressable>
             </View>
             <View style={styles.cardBottom}>
-              <Text accessibilityRole="link" onPress={(e) => { e.stopPropagation(); router.push({ pathname: "/event/[id]", params: { id: event.id } }); }} style={styles.title}>{event.eventTitle}</Text>
+              <Text
+                accessibilityRole="link"
+                onPress={(e) => {
+                  e.stopPropagation();
+                  router.push({
+                    pathname: "/event/[id]",
+                    params: { id: event.id },
+                  });
+                }}
+                style={styles.title}
+              >
+                {event.eventTitle}
+              </Text>
               <Text style={styles.address}>{event.eventAddress}</Text>
               <View style={styles.details}>
                 <View style={styles.countdown}>

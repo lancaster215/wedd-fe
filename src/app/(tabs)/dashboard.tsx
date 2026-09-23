@@ -3,9 +3,9 @@ import { ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "@/context/auth-context";
-import EventsPage from "@/pages/EventsPage";
+import DashboardPage from "@/pages/DashboardPage";
 
-export default function EventsRoute() {
+export default function DashboardRoute() {
   const { isAuthenticated, isInitializing, user } = useAuth();
 
   if (isInitializing) {
@@ -20,9 +20,9 @@ export default function EventsRoute() {
     return <Redirect href="/" />;
   }
 
-  if (user?.role === "VENDOR") {
-    return <Redirect href="/dashboard" />;
+  if (user?.role !== "VENDOR") {
+    return <Redirect href="/events" />;
   }
 
-  return <EventsPage />;
+  return <DashboardPage />;
 }

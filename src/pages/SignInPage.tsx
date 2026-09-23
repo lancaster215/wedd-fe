@@ -66,7 +66,7 @@ const signupSchema = loginSchema.extend({
 type FormData = z.infer<typeof loginSchema>;
 
 export default function SignInPage() {
-  const { isAuthenticated, isInitializing, signIn } = useAuth();
+  const { isAuthenticated, isInitializing, signIn, user } = useAuth();
   const [mode, setMode] = useState<AuthMode>("login");
   const [role, setRole] = useState<Role>("User");
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -87,10 +87,11 @@ export default function SignInPage() {
   });
 
   const values = watch();
-  const requiredFieldsComplete = formSchema.safeParse(values).success;
-  const submitDisabled = isSubmitting || !requiredFieldsComplete;
+  const submitDisabled = isSubmitting;
 
   const changeMode = (nextMode: AuthMode) => {
+    setPasswordVisible(false);
+    setRole("User");
     setPasswordFocused(false);
     setLoginErrorText("");
     setMode(nextMode);
@@ -116,6 +117,18 @@ export default function SignInPage() {
     }
   };
 
+  const submitAndClear = async () => {
+    try {
+      await handleSubmit(onSubmit)();
+    } finally {
+      // Clear inputs after every attempt while keeping validation/API feedback visible.
+      reset(undefined, { keepErrors: true });
+      setPasswordVisible(false);
+      setPasswordFocused(false);
+      setRole("User");
+    }
+  };
+
   if (isInitializing) {
     return (
       <SafeAreaView style={styles.home}>
@@ -125,7 +138,7 @@ export default function SignInPage() {
   }
 
   if (isAuthenticated) {
-    return <Redirect href="/events" />;
+    return <Redirect href={user?.role === "VENDOR" ? "/dashboard" : "/events"} />;
   }
 
   return (
@@ -358,7 +371,7 @@ export default function SignInPage() {
 
               <Pressable
                 accessibilityRole="button"
-                onPress={handleSubmit(onSubmit)}
+                onPress={() => void submitAndClear()}
                 disabled={submitDisabled}
                 accessibilityState={{
                   disabled: submitDisabled,

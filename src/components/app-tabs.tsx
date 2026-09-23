@@ -3,15 +3,19 @@ import { useColorScheme } from "react-native";
 import { Home3, Planet } from "reicon-react-native";
 
 import { Colors } from "@/constants/theme";
+import { AuthUser } from "@/hooks/api/loginAPI";
 
 type AppTabsProps = {
   isAuthenticated: boolean;
+  userDetails: AuthUser | null;
 };
 
-export default function AppTabs({ isAuthenticated }: AppTabsProps) {
+export default function AppTabs({
+  isAuthenticated,
+  userDetails,
+}: AppTabsProps) {
   const scheme = useColorScheme();
   const colors = Colors[scheme === "unspecified" ? "light" : scheme];
-
   return (
     <Tabs
       screenOptions={{
@@ -28,7 +32,21 @@ export default function AppTabs({ isAuthenticated }: AppTabsProps) {
       <Tabs.Screen
         name="events"
         options={{
+          href: userDetails?.role === "USER" ? "/events" : null,
           title: "Events",
+          tabBarIcon: ({ color, size }) => (
+            <Home3
+              color={typeof color === "string" ? color : colors.text}
+              size={size}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          href: userDetails?.role === "VENDOR" ? "/dashboard" : null,
+          title: "Dashboard",
           tabBarIcon: ({ color, size }) => (
             <Home3
               color={typeof color === "string" ? color : colors.text}
